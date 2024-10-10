@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-cmn-Hans" class="font-n">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="format-detection" content="telephone=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=10,chrome=1">
+    <style>
+      html, body {
+        padding: 0;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <% for (var index in htmlWebpackPlugin.files.js) { %>
+    <script type="text/javascript" src="<%=htmlWebpackPlugin.files.js[index] %>"></script>
+    <% } %>
+    <script>
+      const App = app.default;
+      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+    </script>
+  </body>
+</html>

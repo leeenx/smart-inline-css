@@ -1,4 +1,5 @@
 import React, { memo } from "react";
+import './global.css';
 import components from './index.css';
 
 const { View, Text, Fragment } = components;
@@ -6,7 +7,7 @@ const { View, Text, Fragment } = components;
 export default memo(() => {
 
   return (
-    <View className="wrap">
+    <View className="wrap main">
       <View className="item">1111111</View>
       <View className="item">2222222</View>
       <View className="item">3</View>

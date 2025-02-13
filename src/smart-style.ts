@@ -172,6 +172,23 @@ export const setGlobalStyle = (styleSet: StyleSet) => {
   Object.assign(globalStyleSet, pureStyleSet);
 };
 
+const cssVarialbes: Record<string, number | string> = {};
+
+// 设置全局css变量
+export const setVariable = (key: string, value: number | string) => {
+  cssVarialbes[key] = value;
+};
+
+export const setVariables = (variables: Record<string, number | string>) => {
+  Object.entries(variables).forEach(([key, value]) => {
+    setVariable(key, value);
+  });
+};
+
+export const getVariables = () => cssVarialbes;
+export const getVariable = (key: string) => cssVarialbes[key];
+export const getVar = getVariable;
+
 // 样式生成函数
 export function createCss(styleSet: StyleSet) {
   const pureStyleSet: PureStyleSet = {};
@@ -229,8 +246,9 @@ export function createCss(styleSet: StyleSet) {
 
   const css = (...args) => {
     if (!args.length) {
-      return Object.assign({
-        $$getCascadeStyle$$(key: string, parentClassList: string[][], currentIndex: number, styleFnArgs?: any) {
+      return {
+        $$getCascadeStyle$$(key: string, currentIndex: number, styleFnArgs: any) {
+          const parentClassList: string[][] = styleFnArgs.parentClassList;
           const cascadeStyleList = cascadeStyleSet[key];
           const cascadeFnStyleList = cascadeFnStyleSet[key];
           // 没有级联，直接返回 null
@@ -252,7 +270,9 @@ export function createCss(styleSet: StyleSet) {
           }
           return mergeCascadeStyle;
         },
-      }, mergeStyleSet, mergeFnStyleSet);
+        mergeStyleSet,
+        mergeFnStyleSet,
+      };
     };
     const keys = args as string[]
     if (keys.length > 1) {

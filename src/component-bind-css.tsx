@@ -11,13 +11,17 @@ React.createElement = ((type, props, ...children) => {
     if (!props) {
       return ReactCreateElement(type, {
         $$nthchildinfo$$: {
-          parentClassList: []
+          parentClassList: [],
+          parentPropsList: [],
+          siblingPropsList: [],
         }
       }, ...children);
     } else if (!props.$$nthchildinfo$$) {
       Object.assign(props, {
         $$nthchildinfo$$: {
-          parentClassList: []
+          parentClassList: [],
+          parentPropsList: [],
+          siblingPropsList: [],
         }
       });
     }
@@ -85,66 +89,78 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
     const parentClassList: string[][] = [...nthChildInfo.parentClassList];
     const { isFirst, isLast, isOdd, isEven, currentIndex, parentMemoId } = nthChildInfo;
     // 传递给样式函数的参数
-    const styleFnArgs = { ...nthChildInfo, parentClassList, sourceComponentName, props };
-    let memoId: string = `${className || ''}#1`;
+    const styleFnArgs = {
+      ...nthChildInfo,
+      parentClassList,
+      siblingClassList: nthChildInfo.siblingClassList,
+      parentPropsList: nthChildInfo.parentPropsList,
+      siblingPropsList: nthChildInfo.siblingPropsList,
+      sourceComponentName,
+      props,
+    };
+    let memoId: string = `<${sourceComponentName}>${className || ''}#1`;
     const style = (() => {
       if (!className) return rawStyle;
       let resultStyle: any = {};
       if (cssNames.length) {
         if (nthChildInfo) {
           // 生成缓存 id
-          const currentNodeMemoId = `${className}#${currentIndex}`;
+          const currentNodeMemoId = `<${sourceComponentName}>${className}#${currentIndex}`;
           memoId = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
           resultStyle = getMemoCascadeStyle(memoId, () => {
             // 表示在迭代循环中，需要按需添加伪类
             const cssNameList: any[] = [];
-            cssNames.forEach((cssName) => {
+            cssNames.forEach((item) => {
+              const cssName = item;
               const isEmpty = childList.length === 0;
               const isOnlyChild = childList.length === 1;
               Object.assign(styleFnArgs, { isEmpty, isOnlyChild });
               cssNameList.push(typeof styleSet[cssName] === 'function' ? [cssName, currentIndex, styleFnArgs] : cssName);
-              cssNameList.push([`${cssName}:nth-child`, currentIndex, styleFnArgs]);
-              cssNameList.push(`${cssName}:nth-child(${currentIndex})`);
-              if (isOdd) {
-                cssNameList.push(`${cssName}:nth-child(odd)`);
-              }
-              if (isEven) {
-                cssNameList.push(`${cssName}:nth-child(even)`);
-              }
-              if (isFirst) {
-                cssNameList.push(`${cssName}:first-child`);
-              }
-              if (isLast) {
-                cssNameList.push(`${cssName}:last-child`);
-              }
-              if (isEmpty) {
-                cssNameList.push(`${cssName}:empty`);
-              }
-              if (isOnlyChild) {
-                cssNameList.push(`${cssName}:only-child`);
+              // 函数类
+              cssNameList.push([`${cssName}`, currentIndex, styleFnArgs]);
+              if (currentIndex !== undefined) {
+                cssNameList.push(`${cssName}:nth-child(${currentIndex})`);
+                if (isOdd) {
+                  cssNameList.push(`${cssName}:nth-child(odd)`);
+                }
+                if (isEven) {
+                  cssNameList.push(`${cssName}:nth-child(even)`);
+                }
+                if (isFirst) {
+                  cssNameList.push(`${cssName}:first-child`);
+                }
+                if (isLast) {
+                  cssNameList.push(`${cssName}:last-child`);
+                }
+                if (isEmpty) {
+                  cssNameList.push(`${cssName}:empty`);
+                }
+                if (isOnlyChild) {
+                  cssNameList.push(`${cssName}:only-child`);
+                }
               }
             });
             const currentClassList = cssNameList.filter(item => !Array.isArray(item));
             let cascadeStyleList: any[] = [];
             currentClassList.forEach(className => {
-              const cascadeStyle = styleSet.$$getCascadeStyle$$(className, parentClassList, currentIndex, styleFnArgs);
+              const cascadeStyle = styleSet.$$getCascadeStyle$$(className, currentIndex, styleFnArgs);
               if (cascadeStyle) {
                 cascadeStyleList.push(cascadeStyle);
               }
             });
             parentClassList.push(currentClassList);
-            return css(...cssNameList, ...cascadeStyleList);
+            return css('*', sourceComponentName, ...cssNameList, ...cascadeStyleList);
           });
         } else {
           // 根节点会进这个分支
           parentClassList.push(cssNames);
           resultStyle = getMemoCascadeStyle(memoId, () => {
             const cssNameList = cssNames.map(cssName => typeof styleSet[cssName] === 'function' ? [cssName, 1, styleFnArgs] : cssName);
-            return css(...cssNameList);
+            return css('*', sourceComponentName, ...cssNameList);
           });
         }
       }
-      return  resultStyle ? Object.assign(resultStyle, rawStyle) : rawStyle;
+      return resultStyle ? Object.assign(resultStyle, rawStyle) : rawStyle;
     })();
     const beforeClassList: string[] = [];
     const afterClassList: string[] = [];
@@ -177,6 +193,9 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
     if (childList.length) {
       const currentArrayLen = childList.length;
       let currentIndex = 1;
+      const parentPropsList: any[] = [...nthChildInfo.parentPropsList, props];
+      const siblingPropsList: any[] = [];
+      const siblingClassList: string[][] = [];
       childList.forEach(child => {
         if (child.props) {
           const isEven = currentIndex % 2 === 0;
@@ -192,12 +211,25 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
               isFirst,
               isLast,
               parentClassList,
+              parentPropsList,
+              siblingClassList,
+              siblingPropsList,
               parentMemoId: memoId,
             });
           }
           currentIndex += 1;
         }
-      })
+        // 兄弟节点的 props 列表
+        siblingPropsList.push(child.props);
+        const classList: string[] = [];
+        classList.push('*');
+        const childComponentName = child.type?.componentName;
+        if (childComponentName) {
+          classList.push(childComponentName);
+        }
+        classList.push(...(child.props?.className?.split(/\s+/) || []));
+        siblingClassList.push(classList);
+      });
     }
     // 微信小程序中，SourceComponent 是字符串，所以需要用 createElement 来实现
     if (sourceComponentName === 'Fragment') {
@@ -219,29 +251,40 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
       ...others
     } = props;
     const cssNames = className?.split(/\s+/);
-    // const style = className ? css(...cssNames, rawStyle) : rawStyle;
     const nthChildInfo = $$nthchildinfo$$;
     const parentClassList: string[][] = [...nthChildInfo.parentClassList];
+
     // 传递给样式函数的参数
-    const styleFnArgs = { ...nthChildInfo, parentClassList, sourceComponentName, props };
+    const styleFnArgs = {
+      ...nthChildInfo,
+      parentClassList,
+      parentPropsList: nthChildInfo.parentPropsList,
+      siblingPropsList: nthChildInfo.siblingPropsList,
+      sourceComponentName,
+      props,
+    };
     const style = (() => {
       if (!className) return rawStyle;
       // 生成缓存 id
       const { currentIndex = 1, parentMemoId } = nthChildInfo;
-      const currentNodeMemoId = `${className || ''}#${currentIndex}`;
+      const currentNodeMemoId = `<${sourceComponentName}>${className || ''}#${currentIndex}`;
       const memoId = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
       const resultStyle: any = getMemoCascadeStyle(memoId, () => {
         const currentClassList = cssNames.filter(item => !Array.isArray(item));
         let cascadeStyleList: any[] = [];
-        currentClassList.forEach(className => {
-          const cascadeStyle = styleSet.$$getCascadeStyle$$(className, parentClassList, currentIndex, styleFnArgs);
+        currentClassList.forEach(item => {
+          const className = item;
+          const cascadeStyle = styleSet.$$getCascadeStyle$$(className, currentIndex, styleFnArgs);
           if (cascadeStyle) {
             cascadeStyleList.push(cascadeStyle);
           }
         });
         parentClassList.push(currentClassList);
-        const cssNameList = cssNames.map(cssName => typeof styleSet[cssName] === 'function' ? [cssName, 1, styleFnArgs] : cssName);
-        return css(...cssNameList, ...cascadeStyleList);
+        const cssNameList = cssNames.map(item => {
+          const cssName = `.${item}`;
+          return typeof styleSet[cssName] === 'function' ? [cssName, 1, styleFnArgs] : cssName
+        });
+        return css('*', sourceComponentName, ...cssNameList, ...cascadeStyleList);
       });
       return Object.assign(resultStyle, rawStyle);
     })();
@@ -264,6 +307,7 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
     } else {
       globalComponents[key] = createAtomComponent(SourceComponent, key);
     }
+    Object.assign(globalComponents[key], { componentName })
   });
 
   return globalComponents;

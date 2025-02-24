@@ -87,7 +87,7 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
     const cssNames = className?.split(/\s+/);
     const nthChildInfo = $$nthchildinfo$$;
     const parentClassList: string[][] = [...nthChildInfo.parentClassList];
-    const { isFirst, isLast, isOdd, isEven, currentIndex, parentMemoId } = nthChildInfo;
+    const { isFirst, isLast, isOdd, isEven, currentIndex = 1, parentMemoId } = nthChildInfo;
     // 传递给样式函数的参数
     const styleFnArgs = {
       ...nthChildInfo,
@@ -100,13 +100,13 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
     };
     let memoId: string = `<${sourceComponentName}>${className || ''}#1`;
     const style = (() => {
+      // 生成缓存 id
+      const currentNodeMemoId = `<${sourceComponentName}>${className}#${currentIndex}`;
+      memoId = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
       if (!className) return rawStyle;
       let resultStyle: any = {};
       if (cssNames.length) {
         if (nthChildInfo) {
-          // 生成缓存 id
-          const currentNodeMemoId = `<${sourceComponentName}>${className}#${currentIndex}`;
-          memoId = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
           resultStyle = getMemoCascadeStyle(memoId, () => {
             // 表示在迭代循环中，需要按需添加伪类
             const cssNameList: any[] = [];
@@ -116,8 +116,6 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
               const isOnlyChild = childList.length === 1;
               Object.assign(styleFnArgs, { isEmpty, isOnlyChild });
               cssNameList.push(typeof styleSet[cssName] === 'function' ? [cssName, currentIndex, styleFnArgs] : cssName);
-              // 函数类
-              cssNameList.push([`${cssName}`, currentIndex, styleFnArgs]);
               if (currentIndex !== undefined) {
                 cssNameList.push(`${cssName}:nth-child(${currentIndex})`);
                 if (isOdd) {

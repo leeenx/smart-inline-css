@@ -1,13 +1,19 @@
-import React, { memo } from "react";
+import React, { memo, useEffect, useState } from "react";
+import classnames from 'classnames';
 import './global.css';
 import components from './index.css';
 
 const { View, Text, Fragment } = components;
 
 export default memo(() => {
-
+  const [isWrap, setIsWrap] = useState(true);
+  // useEffect(() => {
+  //   setTimeout(() => {
+  //     setIsWrap(false);
+  //   }, 3000);
+  // }, []);
   return (
-    <View className="wrap main">
+    <View className={classnames({ wrap: isWrap, main: isWrap })}>
       <View className="item">1111111</View>
       <View className="item">2222222</View>
       <View className="item">3</View>

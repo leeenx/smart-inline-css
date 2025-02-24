@@ -1,9 +1,21 @@
+/**
+ * smart-inline-css 是一个内联样式的管理框架，
+ * 它内部实现「选择器」的功能，当前支持的选择器有：
+ * 类选择器、元素选择器、无类选择器、before & after 伪元素选择器和通配符
+ */
+
+/**
+ * 相同权重的选择器的优先级由类名的调用顺序决定，后面的优先级大于前面的，这个与css是不一样的
+ * 例如: <View className="blue yellow"></View>，yellow 会覆盖 blue
+ * 同理的 <View className="yellow blue"></View>，blue 会覆盖 yellow
+ */
+
 type PureStyle = Record<string, string | number>;
-type FnStyle = (...args) => PureStyle | undefined;
-interface StyleValue<T> {
-  [key: string]: T;
+type FnStyle = (index?: number, styleFnArgs?: any) => PureStyle | undefined;
+interface StyleMapStyle {
+  [key: string]: string | number | PureStyle | FnStyle | StyleMapStyle
 }
-type Style = Record<string, string | number | PureStyle | FnStyle> | StyleValue<Style> | FnStyle;
+type Style = StyleMapStyle | FnStyle;
 type PureStyleSet = Record<string, PureStyle>;
 type NthSet = Record<string, FnStyle>;
 type CascadeStyleItem = {
@@ -120,7 +132,7 @@ const pickStyleSet = (
           }, cascadeFnStyleSet);
         }
       } else if (styleKey.startsWith('&')) {
-        // 支持父级选择器后，会存在多级嵌套
+        // 支持父级选择器，会存在多级嵌套
         const cssKey = `${key}${styleKey.replace('&', '')}`;
         const curPureStyle: PureStyle = {};
         nextParent[lastParentIndex] = cssKey;

@@ -1,6 +1,6 @@
-import { createComponentsBindCss } from "./utils";
+import { createStyle } from "./utils";
 
-export default createComponentsBindCss({
+export default createStyle({
   wrap: {
     width: '100%',
     height: '100vh',

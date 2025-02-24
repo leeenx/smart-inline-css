@@ -5,7 +5,7 @@ import components from './index.css';
 
 const { View, Text, Fragment } = components;
 
-export default memo(() => {
+const Demo = memo(() => {
   const [isWrap, setIsWrap] = useState(true);
   // useEffect(() => {
   //   setTimeout(() => {
@@ -29,3 +29,5 @@ export default memo(() => {
     </View>
   );
 });
+
+export default Demo;

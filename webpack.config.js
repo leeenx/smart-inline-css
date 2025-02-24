@@ -6,9 +6,11 @@ const isCompress = process.env.COMPRESS === 'yes';
 
 const isDev = process.env.DEV === 'yes';
 
-const entries = { index: './src/index.ts' };
+const entries = { index: './src/lib/index.ts' };
 
 const plugins = [new CleanWebpackPlugin()];
+
+console.log('===== isCompress', isCompress);
 
 // 测试阶段
 if (!isCompress) {

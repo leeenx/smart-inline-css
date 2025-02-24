@@ -1,5 +1,4 @@
-import React, { memo, Fragment } from "react";
-import type { JSXElementConstructor } from "react";
+import React, { memo, Fragment, type JSXElementConstructor } from "react";
 
 type Css = (...args) => any;
 
@@ -35,7 +34,7 @@ React.createElement = ((type, props, ...children) => {
  * 通过对全局组件进行封装后，以下组件将会自动生成【::before】与【::after】:
  * view、text、button、label、cover-view、movable-view
  */
-const defaultContainerComponentMapping: Record<string, string> = {
+const taroContainerComponentMapping: Record<string, string> = {
   Fragment: 'Fragment',
   View: 'View',
   Text: 'Text',
@@ -49,7 +48,7 @@ const defaultContainerComponentMapping: Record<string, string> = {
   MatchMedia: 'MatchMedia',
 };
 
-export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, containerComponentMapping = defaultContainerComponentMapping) {
+export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, containerComponentMapping = taroContainerComponentMapping) {
   const textComponentName = containerComponentMapping.Text;
   const Text = sourceGlobalComponents[textComponentName] as JSXElementConstructor<any>;
   const containerComponentNames = Object.values(containerComponentMapping);
@@ -310,3 +309,8 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
 
   return globalComponents;
 };
+
+// 创建 Taro 的样式
+
+
+// 创建 RN 的样式

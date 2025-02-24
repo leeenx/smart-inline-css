@@ -109,8 +109,7 @@ const pickStyleSet = (
          * 这个条件作为第一个条件是因为函数类优先；
          * 针对伪类或伪元素是一个函数表达时有用。
          */
-        if (styleKey.startsWith('&:')) {
-          // 表示 :nth-child 伪类
+        if (styleKey.startsWith('&')) {
           const nthChildKey = `${key}${styleKey.replace('&', '')}`;
           if (parent.length <= 1) {
             fnStyleSet[nthChildKey] = styleValue as FnStyle;

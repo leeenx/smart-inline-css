@@ -1,4 +1,4 @@
-import { setGlobalStyle } from "../smart-style";
+import { setGlobalStyle } from '../lib';
 
 // 全局样式
 setGlobalStyle({

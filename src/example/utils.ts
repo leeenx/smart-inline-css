@@ -1,8 +1,5 @@
-import { componentBindCss } from "../component-bind-css";
-import { createCss } from "../smart-style";
+import { componentBindCss, createCss, type StyleSet } from "../lib";
 import * as baseComponents from './base-components';
-
-import type { StyleSet } from "../smart-style";
 
 // 源基础数组
 const sourceComponents = baseComponents;
@@ -24,4 +21,4 @@ const containerComponentMapping = {
  * 简化调用成本，例如以下的 createComponents
  */
 
-export const createComponentsBindCss = (css: StyleSet) => componentBindCss<typeof sourceComponents>(createCss(css), sourceComponents, containerComponentMapping);
+export const createStyle = (css: StyleSet) => componentBindCss<typeof sourceComponents>(createCss(css), sourceComponents, containerComponentMapping);

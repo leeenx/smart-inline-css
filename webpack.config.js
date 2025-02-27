@@ -10,11 +10,9 @@ const entries = { index: './src/lib/index.ts' };
 
 const plugins = [new CleanWebpackPlugin()];
 
-console.log('===== isCompress', isCompress);
-
 // 测试阶段
 if (!isCompress) {
-  Object.assign(entries, { example: './src/example/index.tsx' });
+  Object.assign(entries, { index: './src/example/index.tsx' });
   plugins.push(
     new HtmlWebpackPlugin({
       template: './src/index.html',
@@ -32,7 +30,6 @@ if (!isCompress) {
     })
   );
 }
-
 module.exports = {
   mode: 'production', // development | production | none
   entry: entries,

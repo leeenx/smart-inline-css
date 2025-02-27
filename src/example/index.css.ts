@@ -18,12 +18,42 @@ export default createStyle({
     }
   },
   main: {
-    backgroundColor: 'green',
-    item: {
-      text: {
-        color: 'yellow'
-      }
-    }
+    // backgroundColor: 'green',
+    // item: {
+    //   'text1': {
+    //     color: 'pink'
+    //   }
+    // },
+    item(index, args) {
+      console.log('===== index', index, args);
+      return { color: 'pink' };
+    },
+    // test: {
+    //   '&-1': {
+    //     fontSize: 12
+    //   },
+    //   'c1 c2 c3': {
+    //     fontWeight: 400
+    //   },
+    //   '&:nth-child(1)': {
+    //     color: 'green'
+    //   },
+    //   '+ test': {
+    //     color: 'blue',
+    //   },
+    //   '+ item': {
+    //     color: 'yellow',
+    //   },
+    //   '~ item': {
+    //     fontSize: 0,
+    //   },
+    //   '[title="hello everyone!"]': {
+    //     fontWeight: 900,
+    //   },
+    //   '[title="a&b"]': {
+
+    //   },
+    // },
     // item(index, args) {
     //   console.log({ index, args });
     //   return {

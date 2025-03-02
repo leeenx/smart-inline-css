@@ -1,6 +1,21 @@
-import React, { memo, Fragment, type JSXElementConstructor } from "react";
+import React, {
+  memo,
+  Fragment,
+  useMemo,
+  type JSXElementConstructor,
+  type PropsWithChildren,
+  useEffect,
+  useState,
+} from "react";
+import { eventBus } from './event-bus';
+import type { PureStyle, StyleFnArgs } from '../lib/core';
 
-type Css = (...args) => any;
+type CreateCssReturn = {
+  getCascadeStyle: (key: string, currentIndex: number, styleFnArgs: StyleFnArgs) => PureStyle;
+  mergeStyles: (pureStyles: PureStyle[]) => PureStyle;
+  isEmptyStyle: (pureStyle: PureStyle) => boolean;
+  setLocalName: (name: string) => void;
+}
 
 // createElement 劫持
 const ReactCreateElement = React.createElement;
@@ -50,14 +65,70 @@ const taroContainerComponentMapping: Record<string, string> = {
   MatchMedia: 'MatchMedia',
 };
 
-export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, containerComponentMapping = taroContainerComponentMapping) {
+// 用来初始化样式的专用组件
+const InitStyleComponent = memo((props: { initStyle: () => void }) => {
+  props.initStyle();
+  return null;
+});
+
+// 组件名称
+const inlineStyleWrapKeyMap: Record<string, string> = {};
+
+// 内联样式容器
+type InlineCssContainerProps = PropsWithChildren<{ name: string, setLocalName?: (name: string) => void; }>;
+const InlineCssContainer = memo((props: InlineCssContainerProps) => {
+  const { name, setLocalName } = props;
+  const [index, update] = useState(0);
+  useMemo(() => {
+    if (name) {
+      if (inlineStyleWrapKeyMap[name]) {
+        // 名字冲突
+        console.error('withInlineStyleWrap name 冲突，请检查！');
+      }
+      // 设置局部级联样式作用域名
+      setLocalName?.(name);
+    }
+  }, []);
+  useEffect(() => {
+    eventBus.on('update-globale-inline-style', () => {
+      updateNodeMemoIdByName(name);
+      update(index => index + 1);
+    });
+    eventBus.on('update-local-inline-style', (localName: string) => {
+      if (localName === name) {
+        updateNodeMemoIdByName(name);
+        update(index => index + 1);
+      }
+    });
+  }, []);
+  return <Fragment key={index}>{ props.children }</Fragment>;
+});
+
+const nodeMemoIdMap: Record<string, string> = {};
+
+// 缓存ID的索引
+let memoIndex = 0;
+// 按 name 返回一个缓存id 
+const getNodeMemoIdByName = (name: string) => {
+  let memoId = nodeMemoIdMap[name];
+  if (!memoId) {
+    memoId = `${name}#${++memoIndex}`;
+    nodeMemoIdMap[name] = memoId;
+  }
+  return memoId;
+};
+
+// 更新 memoId
+const updateNodeMemoIdByName = (name) => {
+  nodeMemoIdMap[name] = `${name}#${++memoIndex}`;
+};
+
+export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle, setLocalName }: CreateCssReturn, sourceGlobalComponents: T, containerComponentMapping = taroContainerComponentMapping) {
   const textComponentName = containerComponentMapping.Text;
   const Text = sourceGlobalComponents[textComponentName] as JSXElementConstructor<any>;
   const containerComponentNames = Object.values(containerComponentMapping);
-  const globalComponents = {} as T & { Fragment: typeof Fragment };
 
-  // 返回所有的样式（包括函数）
-  const styleSet = css();
+  const globalComponents = {} as T & { Fragment: typeof Fragment; InlineCssContainer: typeof InlineCssContainer; };
 
   // 缓存样式
   const memoCascadeStyleSet: Record<string, any> = {};
@@ -81,61 +152,77 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
     } = props;
     const childList = (() => {
       if (children) {
-        return Array.isArray(children) ? children : [children];
+        if (Array.isArray(children)) {
+          return children;
+        }
+        // 非数组，转成数组
+        return [children];
       }
       return [];
     })();
-    const cssNames = className?.split(/\s+/);
+    const cssNames = className?.split(/\s+/) || [];
     const extraInfo = $$extrainfo$$;
-    const parentClassList: string[][] = [...extraInfo.parentClassList];
-    const { isFirst, isLast, isOdd, isEven, currentIndex = 1, parentMemoId, childPropsList } = extraInfo;
+    const { currentIndex = 1, parentMemoId, childPropsList, localName } = extraInfo;
     // 传递给样式函数的参数
     const styleFnArgs = {
       ...extraInfo,
-      parentClassList,
       sourceComponentName,
       props,
     };
     // 生成缓存 id
-    const currentNodeMemoId = `<${sourceComponentName}>${className}#${currentIndex}`;
-    const memoId: string = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
-    
-    const beforeClassList: string[] = [];
-    const afterClassList: string[] = [];
+    const currentNodeMemoId = (sourceComponentName !== 'InlineCssContainer' ? `<${sourceComponentName}>${className}#${currentIndex}` : '');
+    const currentClassList: string[] = ['*', sourceComponentName, ...cssNames];
+    const parentClassList: string[][] = [...extraInfo.parentClassList, currentClassList];
+    let memoId: string = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
+    if (localName) {
+      memoId = `${getNodeMemoIdByName(localName)}|${memoId}`;
+    }
+    const beforeStyles: PureStyle[] = [];
+    const afterStyles: PureStyle[] = [];
     cssNames?.forEach(cssName => {
-      const beforeClass = `${cssName}::before`;
-      const afterClass = `${cssName}::after`;
-      if (styleSet.hasOwnProperty(beforeClass)) {
+      const beforeCss = getCascadeStyle(`${cssName}::before`, currentIndex, styleFnArgs);
+      const afterCss = getCascadeStyle(`${cssName}::after`, currentIndex, styleFnArgs);
+      if (!isEmptyStyle(beforeCss)) {
         // 有 before
-        beforeClassList.push(beforeClass);
+        beforeStyles.push(beforeCss);
       }
-      if (styleSet.hasOwnProperty(afterClass)) {
+      if (!isEmptyStyle(afterCss)) {
         // 有 after
-        afterClassList.push(afterClass);
+        afterStyles.push(afterCss);
       }
     });
     const renderBefore = () => {
-      if (!beforeClassList.length) return null;
-      const beforeStyle = css(...beforeClassList);
+      if (!beforeStyles.length) return null;
+      const beforeStyle = mergeStyles(beforeStyles);
       if (!beforeStyle.hasOwnProperty('content')) return null;
       const content = beforeStyle.content;
-      return <Text style={beforeStyle} data-pseudo="::before">{content}</Text>;
+      return <Text style={beforeStyle} data-pseudo="::before" key="pseudo-before">{content}</Text>;
     };
     const renderAfter = () => {
-      if (!afterClassList.length) return null;
-      const afterStyle = css(...afterClassList);
+      if (!afterStyles.length) return null;
+      const afterStyle = mergeStyles(afterStyles);
       if (!afterStyle.hasOwnProperty('content')) return null;
       const content = afterStyle.content;
-      return <Text style={afterStyle} data-pseudo="::after">{content}</Text>;
+      return <Text style={afterStyle} data-pseudo="::after" key="pseudo-after">{content}</Text>;
     };
+
     if (childList.length) {
-      const currentArrayLen = childList.length;
+      let currentArrayLen = childList.length;
       let currentIndex = 1;
       const parentPropsList: any[] = [...extraInfo.parentPropsList, props];
       const siblingPropsList: any[] = [];
       const siblingClassList: string[][] = [];
-      childList.forEach(child => {
+      const childrenIterate = (child: any) => {
         if (child.props) {
+          // 兄弟节点的 props 列表
+          siblingPropsList.push(child.props);
+          const classList: string[] = ['*'];
+          const childComponentName = child.type?.componentName;
+          if (childComponentName) {
+            classList.push(childComponentName);
+          }
+          classList.push(...(child.props?.className?.split(/\s+/) || []));
+          siblingClassList.push(classList);
           const isEven = currentIndex % 2 === 0;
           const isOdd = !isEven;
           const isFirst = currentIndex === 1;
@@ -154,99 +241,55 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
               siblingClassList,
               siblingPropsList,
               parentMemoId: memoId,
+              localName: props.name,
+              props: child.props,
             });
           }
           currentIndex += 1;
+        } else if (Array.isArray(child)) {
+          child.forEach(childrenIterate);
         }
-        // 兄弟节点的 props 列表
-        siblingPropsList.push(child.props);
-        const classList: string[] = [];
-        classList.push('*');
-        const childComponentName = child.type?.componentName;
-        if (childComponentName) {
-          classList.push(childComponentName);
-        }
-        classList.push(...(child.props?.className?.split(/\s+/) || []));
-        siblingClassList.push(classList);
-      });
+      };
+      childList.forEach(childrenIterate);
     }
     // 微信小程序中，SourceComponent 是字符串，所以需要用 createElement 来实现
     if (sourceComponentName === 'Fragment') {
       return React.createElement(SourceComponent, others, [renderBefore(), children, renderAfter()]);
     }
+    const isEmpty = childList.length === 0;
+    const isOnlyChild = childList.length === 1;
+    Object.assign(styleFnArgs, { currentClassList, isEmpty, isOnlyChild });
+    Object.assign($$extrainfo$$, { currentClassList, isEmpty, isOnlyChild });
     // 在生成 child 之后生成样式，这样可以获取到完整的 parentPropsList、sublingPropsList 和 childPropsList
-    const style = (() => {
-      if (!className) return rawStyle;
-      let resultStyle: any = {};
-      if (cssNames.length) {
-        if (extraInfo) {
+    const style: PureStyle = {};
+    const elementOptions = { className, style, ...others };
+    if (sourceComponentName === 'InlineCssContainer') {
+      Object.assign(elementOptions, { setLocalName });
+    }
+    const initStyle = () => {
+      // 在渲染子元素后再生成样式
+      Object.assign(style, (() => {
+        if (!className) return rawStyle;
+        let resultStyle: PureStyle = {};
+        if (cssNames.length) {
           resultStyle = getMemoCascadeStyle(memoId, () => {
             // 表示在迭代循环中，按需添加伪类
-            const cssNameList: any[] = ['*'];
-            cssNames.forEach((item, index) => {
-              const cssName = item;
-              const isEmpty = childList.length === 0;
-              const isOnlyChild = childList.length === 1;
-              Object.assign(styleFnArgs, { isEmpty, isOnlyChild });
-              cssNameList.push(typeof styleSet[cssName] === 'function' ? [cssName, currentIndex, styleFnArgs] : cssName);
-              if (currentIndex !== undefined) {
-                index === 0 && cssNameList.push(`*:nth-child(${currentIndex})`);
-                cssNameList.push(`${cssName}:nth-child(${currentIndex})`);
-                if (isOdd) {
-                  index === 0 && cssNameList.push('*:nth-child(odd)');
-                  cssNameList.push(`${cssName}:nth-child(odd)`);
-                }
-                if (isEven) {
-                  index === 0 && cssNameList.push('*:nth-child(even)');
-                  cssNameList.push(`${cssName}:nth-child(even)`);
-                }
-                if (isFirst) {
-                  index === 0 && cssNameList.push('*:first-child');
-                  cssNameList.push(`${cssName}:first-child`);
-                }
-                if (isLast) {
-                  index === 0 && cssNameList.push('*:last-child');
-                  cssNameList.push(`${cssName}:last-child`);
-                }
-                if (isEmpty) {
-                  index === 0 && cssNameList.push('*:empty');
-                  cssNameList.push(`${cssName}:empty`);
-                }
-                if (isOnlyChild) {
-                  index === 0 && cssNameList.push('*:only-child');
-                  cssNameList.push(`${cssName}:only-child`);
-                }
-              }
-            });
-            const currentClassList = cssNameList.filter(item => !Array.isArray(item));
-            let cascadeStyleList: any[] = [];
-            currentClassList.forEach(className => {
-              const cascadeStyle = styleSet.$$getCascadeStyle$$(className, currentIndex, styleFnArgs);
-              if (cascadeStyle) {
-                cascadeStyleList.push(cascadeStyle);
-              }
-            });
-            parentClassList.push(currentClassList);
-            Object.assign(styleFnArgs, { currentClassList });
-            Object.assign($$extrainfo$$, { currentClassList });
-            return css('*', sourceComponentName, ...cssNameList, ...cascadeStyleList);
-          });
-        } else {
-          // 根节点会进这个分支
-          parentClassList.push(cssNames);
-          resultStyle = getMemoCascadeStyle(memoId, () => {
-            const cssNameList = cssNames.map(cssName => typeof styleSet[cssName] === 'function' ? [cssName, 1, styleFnArgs] : cssName);
-            return css('*', sourceComponentName, ...cssNameList);
+            const cascadeStyleList: PureStyle[] = currentClassList
+              .map(className => getCascadeStyle(className, currentIndex, styleFnArgs))
+              .filter(cascadeStyle => !isEmptyStyle(cascadeStyle));
+            return mergeStyles(cascadeStyleList);
           });
         }
-      }
-      return resultStyle ? Object.assign(resultStyle, rawStyle) : rawStyle;
-    })();
-    const element = React.createElement(SourceComponent, {
-      className,
-      style,
-      ...others
-    }, [renderBefore(), children, renderAfter()]);
+        return resultStyle ? Object.assign(resultStyle, rawStyle) : rawStyle;
+      })());
+    };
+    const content = [
+      renderBefore(),
+      children,
+      renderAfter(),
+      <InitStyleComponent key="initStyle" initStyle={initStyle} />
+    ].filter(item => Boolean(item));
+    const element = React.createElement(SourceComponent, elementOptions, content);
     return element;
   });
 
@@ -259,7 +302,7 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
       ...others
     } = props;
     const cssNames = className?.split(/\s+/);
-    cssNames.unshift('*');
+    cssNames.unshift('*', sourceComponentName);
     const extraInfo = $$extrainfo$$;
     const parentClassList: string[][] = [...extraInfo.parentClassList];
 
@@ -276,24 +319,14 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
       const { currentIndex = 1, parentMemoId } = extraInfo;
       const currentNodeMemoId = `<${sourceComponentName}>${className || ''}#${currentIndex}`;
       const memoId = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
-      const resultStyle: any = getMemoCascadeStyle(memoId, () => {
-        const currentClassList = cssNames.filter(item => !Array.isArray(item));
-        let cascadeStyleList: any[] = [];
-        currentClassList.forEach(item => {
-          const className = item;
-          const cascadeStyle = styleSet.$$getCascadeStyle$$(className, currentIndex, styleFnArgs);
-          if (cascadeStyle) {
-            cascadeStyleList.push(cascadeStyle);
-          }
-        });
-        parentClassList.push(currentClassList);
-        const cssNameList = cssNames.map(item => {
-          const cssName = item;
-          return typeof styleSet[cssName] === 'function' ? [cssName, 1, styleFnArgs] : cssName
-        });
-        Object.assign(styleFnArgs, { currentClassList });
-        Object.assign($$extrainfo$$, { currentClassList });
-        return css('*', sourceComponentName, ...cssNameList, ...cascadeStyleList);
+      const resultStyle: PureStyle = getMemoCascadeStyle(memoId, () => {
+        const cascadeStyleList: PureStyle[] = cssNames
+          .map(cssName => getCascadeStyle(cssName, currentIndex, styleFnArgs))
+          .filter(cascadeStyle => !isEmptyStyle(cascadeStyle));
+        parentClassList.push(cssNames);
+        Object.assign(styleFnArgs, { currentClassList: cssNames });
+        Object.assign($$extrainfo$$, { currentClassList: cssNames });
+        return mergeStyles(cascadeStyleList);
       });
       return Object.assign(resultStyle, rawStyle);
     })();
@@ -307,6 +340,9 @@ export function componentBindCss<T>(css: Css, sourceGlobalComponents: T, contain
 
   // fragment 容器
   globalComponents['Fragment'] = createContainerComponent(Fragment, 'Fragment');
+
+  // InlineCssContainer 容器
+  globalComponents['InlineCssContainer'] = createContainerComponent(InlineCssContainer, 'InlineCssContainer');
 
   Object.keys(sourceGlobalComponents as Object).forEach((componentName) => {
     const key: string = componentName;

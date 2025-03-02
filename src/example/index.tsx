@@ -3,35 +3,40 @@ import classnames from 'classnames';
 import './global.css';
 import components from './index.css';
 
-const { View, Text, Fragment } = components;
+const { View, Text, Fragment, InlineCssContainer } = components;
 
 const Demo = memo(() => {
   const [isWrap, setIsWrap] = useState(true);
-  useEffect(() => {
-    setTimeout(() => {
-      setIsWrap(false);
-    }, 3000);
-  }, []);
+  // useEffect(() => {
+  //   setTimeout(() => {
+  //     setIsWrap(false);
+  //   }, 6000);
+  // }, []);
   return (
-    <View className={classnames({ wrap: true, main: true })}>
-      <View className="item" data-item="xx-xx-xx" data-wrap={isWrap}>
-        <Text className="text1" data-text="text1-content">
-          1111111
-          <Text className="text2">text2</Text>
-        </Text>
+    <InlineCssContainer name="demo">
+      <View className={classnames({ wrap: true, main: true })}>
+        <View className="item xxx" data-item="xx-xx-xx" data-wrap={isWrap}>
+          <Text className="text1" data-text="text1-content">
+            1111111
+            <Text className="text2" data-y="y">
+              text2
+              <Text className="text3">text3</Text>
+            </Text>
+          </Text>
+        </View>
+        <View className="item">2222222</View>
+        <View className="item">3</View>
+        {/* <Fragment>
+          {
+            [1, 2, 3].map(item => (
+              <View className="item" key={item}>
+                <Text className="text">{ item }</Text>
+              </View>
+            ))
+          }
+        </Fragment> */}
       </View>
-      <View className="item">2222222</View>
-      <View className="item">3</View>
-      <Fragment>
-        {
-          [1, 2, 3].map(item => (
-            <View className="item" key={item}>
-              <Text className="text">{ item }</Text>
-            </View>
-          ))
-        }
-      </Fragment>
-    </View>
+    </InlineCssContainer>
   );
 });
 

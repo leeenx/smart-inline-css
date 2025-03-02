@@ -1,12 +1,12 @@
-import { setGlobalStyle } from '../lib';
+import { setGlobalStyle, setStyle } from '../lib';
 
 // 全局样式
 setGlobalStyle({
   '*': {
-    fontWeight: 500
+    fontWeight: 500,
   },
   item: {
     fontSize: '16px',
     lineHeight: '1.5'
-  }
+  },
 });

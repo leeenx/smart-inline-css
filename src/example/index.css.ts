@@ -14,7 +14,12 @@ export default createStyle({
       },
       '&:nth-child(2)': {
         color: 'green',
-      }
+      },
+      '&[data-item="xx-xx-xx"]': {
+        text3: {
+          backgroundColor: 'green',
+        }
+      },
     }
   },
   main: {
@@ -24,10 +29,10 @@ export default createStyle({
     //     color: 'pink'
     //   }
     // },
-    item(index, args) {
-      console.log('===== index', index, args);
-      return { color: 'pink' };
-    },
+    // item(index, args) {
+    //   console.log('===== index', index, args);
+    //   return { color: 'pink' };
+    // },
     // test: {
     //   '&-1': {
     //     fontSize: 12

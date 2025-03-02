@@ -20,6 +20,12 @@ export default createStyle({
           backgroundColor: 'green',
         }
       },
+      'text2 + text2 text3': {
+        backgroundColor: 'yellow',
+      },
+      'text2 > xxx': {
+        backgroundColor: 'pink',
+      },
     }
   },
   main: {

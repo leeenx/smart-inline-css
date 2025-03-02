@@ -166,6 +166,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
     // 传递给样式函数的参数
     const styleFnArgs = {
       ...extraInfo,
+      $$extrainfo$$,
       sourceComponentName,
       props,
     };

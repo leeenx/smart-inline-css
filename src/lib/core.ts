@@ -94,6 +94,8 @@ const addStyleItemByWeight = (
       // 插在当前位置后面
       cascadeList.splice(i + 1, 0, item);
       break;
+    } else if (i === 0) {
+      cascadeList.unshift(item);
     }
   }
 };
@@ -106,8 +108,7 @@ const addCascadeStyle = (
 ) => {
   if (!cascadeStyleSet[key]) {
     cascadeStyleSet[key] = [item];
-  }
-  else {
+  } else {
     const cascadeStyleList = cascadeStyleSet[key];
     addStyleItemByWeight(item, cascadeStyleList);
   }
@@ -233,6 +234,7 @@ const parseStyleSet = (sourceStyleSet: StyleSet) => {
   const targetStyleSet = resolveShortKey(sourceStyleSet);
   // 直接处理 targetStyleSet，替换 &
   resolveParentSymbol(targetStyleSet);
+  console.log('==== targetStyleSet', targetStyleSet);
   return targetStyleSet;
 };
 
@@ -478,10 +480,6 @@ const pickCascadeStyleSet = (
   const categorize = (style: Style, weight: number = 0, pureStyle?: PureStyle, parent: string[] = []) => {
     const nextParent = [...parent];
     Object.entries(style).forEach(([styleKey, styleValue]) => {
-      if (['>', '+', '~'].includes(styleKey)) {
-        // 关系符
-        console.log('===== 关系符', styleKey);
-      }
       if (typeof styleValue === 'function') {
         const currentWeight = weight + getSelectorWeight(styleKey);
         const baseClassName = getBaseClassName(styleKey);
@@ -700,13 +698,65 @@ export function createCss(styleSet: StyleSet) {
     const { parentClassList, parentPropsList } = styleFnArgs;
     if (parentClassList.length) {
       cascadeStyleList.forEach(({ parent, style, styleFn, checkSelector, weight }) => {
-        const isMatched = checkSelector(styleFnArgs) && parent.every(parentClassName => {
+        /**
+         * cascadeStyleList 迭代时，以下变量：
+         * propsList/propsListStartIndex/propsListEndIndex/currentProps
+         * 需要重置，所以变量的位置放在下面，而不是循环体之外
+         */
+        let propsList = parentPropsList;
+        /**
+         * propsListStartIndex 是做 DOM 节点层级遍历的起始位置
+         * 有两个作用，一个是提升性能，另外一个是保证遍历的向前性
+         */
+        let propsListStartIndex = propsList.length - 1;
+        let propsListEndIndex = 0;
+        let currentProps: Props = styleFnArgs;
+        const parentLastIndex = parent.length - 1;
+        const isMatched = checkSelector(styleFnArgs) && parent.every((_, parentIndex) => {
+          // 由近到远进行匹配
+          const parentClassName = parent[parentLastIndex - parentIndex];
           if (parentClassName === '*') {
             // 通配符直接返回 true
             return true;
           }
+          if (parentClassName === '+') {
+            const { currentIndex } = currentProps.$$extrainfo$$;
+            if (currentIndex === 1) {
+              // 没有上一个兄弟节点
+              return false;
+            }
+            const prevIndex = currentIndex - 1;
+            // 遇到 + 号，propsList 需要切换到它上一个兄弟节点的 parentPropsList
+            const prevExtraInfo = currentProps.$$extrainfo$$.siblingPropsList[prevIndex].$$extrainfo$$;
+            const prevParentPropsList = prevExtraInfo.parentPropsList;
+            propsList = [...prevParentPropsList, prevExtraInfo.props];
+            // 重置起始索引
+            propsListStartIndex = propsList.length - 1;
+            propsListEndIndex = 0;
+            currentProps = propsList[propsListStartIndex];
+            return true;
+          }
+          if (parentClassName === '~') {
+            
+          }
+          if (parentClassName === '>') {
+            propsListEndIndex = propsListStartIndex;
+            return true;
+          }
+          
           const parentSelectorCheck = complexExecMap[parentClassName];
-          return parentPropsList.some((parentProps) => parentSelectorCheck(parentProps.$$extrainfo$$.currentIndex, parentProps.$$extrainfo$$));
+          for(let i = propsListStartIndex; i >= propsListEndIndex; --i) {
+            currentProps = propsList[i];
+            const isOk = parentSelectorCheck(currentProps.$$extrainfo$$.currentIndex, currentProps.$$extrainfo$$);
+            if (isOk) {
+              propsListStartIndex = i - 1;
+              if (propsListEndIndex !== 0) {
+                // 直接选择器【>】配置后，重置位置
+                propsListEndIndex = 0;
+              }
+              return true;
+            }
+          }
         });
         if (isMatched) {
           // 表示找到级联样式了

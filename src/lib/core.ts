@@ -52,6 +52,9 @@ type CascadeFnStyleSet = Record<string, CascadeFnStyleItem[]>;
 
 export type StyleSet = Record<string, Style>;
 
+type ComplexExec = (index?: number, styleFnArgs?: StyleFnArgs) => boolean;
+type ComplexSelectorType = ':not' | ':has' | ':not:has' | ':has:not' | ':nth-child' | ':first-child' | ':last-child' | ':only-child' | ':empty' | 'attribute-selector';
+
 // 全局样式里的 cascadeStyle
 const globalCascadeStyleSet: CascadeStyleSet= {};
 
@@ -270,8 +273,6 @@ const getExecFromUniqueKey = (key: string) => {
   return complexExecMap[selector];
 };
 
-type ComplexExec = (index?: number, styleFnArgs?: StyleFnArgs) => boolean;
-type ComplexSelectorType = ':not' | ':has' | ':not:has' | ':has:not' | ':nth-child' | ':first-child' | ':last-child' | ':only-child' | ':empty' | 'attribute-selector';
 const complexExecMap: Record<string, ComplexExec> = {};
 const complexSelectorWeight: Record<string, number> = {};
 const complexSelectorBaseNameMap: Record<string, string> = {};
@@ -552,8 +553,22 @@ export const setStyle = (name: string, styleSet: StyleSet) => {
 const cssVarialbes: Record<string, number | string> = {};
 
 // 设置全局css变量
-export const setVariable = (key: string, value: number | string) => {
-  cssVarialbes[key] = value;
+export const setVariable = (key: string, rawValue: number | string) => {
+  if (!key.startsWith('--')) {
+    throw new Error(`请使用 css 变量格式，当前变量名为：${key}`);
+  }
+  let value = rawValue;
+  if (typeof rawValue === 'string' && /var\(--/.test(rawValue)) {
+    if (/^var\(--[^\)]+\)$/.test(rawValue)) {
+      value = getVariable(rawValue) || rawValue;
+    } else {
+      // 批量替换
+      value = rawValue.replace(/var\(--[^\)]+\)/g, (token: string) => {
+        return `${getVariable(token) || token}`;
+      });
+    }
+  }
+  cssVarialbes[`var(${key})`] = value;
 };
 
 export const setVariables = (variables: Record<string, number | string>) => {
@@ -563,7 +578,7 @@ export const setVariables = (variables: Record<string, number | string>) => {
 };
 
 export const getVariables = () => cssVarialbes;
-export const getVariable = (key: string) => cssVarialbes[key];
+export const getVariable = (key: string) => cssVarialbes[`${key}`];
 export const getVar = getVariable;
 
 // 合并级联样式集

@@ -43,15 +43,36 @@ const Demo = memo(() => {
             <Text className="xxx">xxx</Text>
           </View>
         </View>
-        {/* <Fragment>
+        <Fragment>
           {
-            [1, 2, 3].map(item => (
-              <View className="item" key={item}>
-                <Text className="text">{ item }</Text>
+            [1, 2, 3, 4, 5, 6, 7].map(item => (
+              <View className="sibling" key={item}>
+                <Text className="text">item-{ item }</Text>
               </View>
             ))
           }
-        </Fragment> */}
+          {/* <View className="sibling">
+            <Text className="text">item-1</Text>
+          </View>
+          <View className="sibling">
+            <Text className="text">item-2</Text>
+          </View>
+          <View className="sibling">
+            <Text className="text">item-3</Text>
+          </View>
+          <View className="sibling">
+            <Text className="text">item-4</Text>
+          </View>
+          <View className="sibling">
+            <Text className="text">item-5</Text>
+          </View>
+          <View className="sibling">
+            <Text className="text">item-6</Text>
+          </View>
+          <View className="sibling">
+            <Text className="text">item-7</Text>
+          </View> */}
+        </Fragment>
       </View>
     </InlineCssContainer>
   );

@@ -36,6 +36,7 @@ type Style = StyleMapStyle | FnStyle;
 type CascadeStyleItem = {
   key: string;
   parent: string[];
+  parentClassList: string[];
   weight: number;
   checkSelector: (styleFnArgs: StyleFnArgs) => boolean;
   style?: PureStyle;
@@ -44,6 +45,7 @@ type CascadeStyleSet = Record<string, CascadeStyleItem[]>;
 type CascadeFnStyleItem = {
   key: string;
   parent: string[];
+  parentClassList: string[];
   weight: number;
   checkSelector: (styleFnArgs: StyleFnArgs) => boolean;
   styleFn?: FnStyle;
@@ -449,6 +451,9 @@ const getSelectorWeight = (selector: string) => {
 
 // 返回复杂选择器的基础类名
 const getBaseClassName = (selector: string) => {
+  if (['+', '~', '>'].includes(selector)) {
+    return selector;
+  }
   let className = complexSelectorBaseNameMap[selector];
   if (!className) {
     getExecFromComplexSelector(selector);
@@ -477,8 +482,9 @@ const pickCascadeStyleSet = (
   cascadeStyleSet: CascadeStyleSet, // 级联纯样式集
   cascadeFnStyleSet: CascadeFnStyleSet, // 级联函数类样式集
 ) => {
-  const categorize = (style: Style, weight: number = 0, pureStyle?: PureStyle, parent: string[] = []) => {
+  const categorize = (style: Style, weight: number = 0, pureStyle?: PureStyle, parent: string[] = [], parentClassList: string[] = []) => {
     const nextParent = [...parent];
+    const nextParentClassList = [...parentClassList];
     Object.entries(style).forEach(([styleKey, styleValue]) => {
       if (typeof styleValue === 'function') {
         const currentWeight = weight + getSelectorWeight(styleKey);
@@ -486,6 +492,7 @@ const pickCascadeStyleSet = (
         addCascadeFnStyle(baseClassName, {
           key: styleKey,
           parent: nextParent,
+          parentClassList: nextParentClassList,
           weight: currentWeight,
           checkSelector: createCheckSelector(styleKey),
           styleFn: styleValue as FnStyle,
@@ -496,12 +503,15 @@ const pickCascadeStyleSet = (
         const baseClassName = getBaseClassName(styleKey);
         const curPureStyle: PureStyle = {};
         nextParent.push(styleKey);
-        categorize(styleValue as Style, currentWeight, curPureStyle, nextParent);
+        nextParentClassList.push(baseClassName);
+        categorize(styleValue as Style, currentWeight, curPureStyle, nextParent, nextParentClassList);
         nextParent.pop();
+        nextParentClassList.pop();
         if (Object.keys(curPureStyle).length) { // 非空样式
           addCascadeStyle(baseClassName, {
             key: styleKey,
             parent: nextParent,
+            parentClassList: nextParentClassList,
             weight: currentWeight,
             checkSelector: createCheckSelector(styleKey),
             style: curPureStyle,
@@ -695,9 +705,13 @@ export function createCss(styleSet: StyleSet) {
     styleFnArgs: StyleFnArgs,
     callback: (cascadeStyle: PureStyle | FnStyle, weight: number) => void
   ) => {
-    const { parentClassList, parentPropsList } = styleFnArgs;
+    const { parentClassList, parentPropsList, currentClassList } = styleFnArgs;
     if (parentClassList.length) {
-      cascadeStyleList.forEach(({ parent, style, styleFn, checkSelector, weight }) => {
+      const currentClass = currentClassList[currentClassList.length - 1];
+      if (currentClass === 'sibling') {
+        console.log('======= cascadeStyleList', { cascadeStyleList, parentPropsList });
+      }
+      cascadeStyleList.forEach(({ parent, parentClassList, style, styleFn, checkSelector, weight }) => {
         /**
          * cascadeStyleList 迭代时，以下变量：
          * propsList/propsListStartIndex/propsListEndIndex/currentProps
@@ -712,52 +726,74 @@ export function createCss(styleSet: StyleSet) {
         let propsListEndIndex = 0;
         let currentProps: Props = styleFnArgs;
         const parentLastIndex = parent.length - 1;
-        const isMatched = checkSelector(styleFnArgs) && parent.every((_, parentIndex) => {
-          // 由近到远进行匹配
-          const parentClassName = parent[parentLastIndex - parentIndex];
-          if (parentClassName === '*') {
-            // 通配符直接返回 true
+        /**
+         * 为了支持 ~ 选择器，需要从原来的循环体改成递归，即以下方法
+         */
+        const iterateParentItem = (index = parentLastIndex) => {
+          if (index === -1) {
+            // 到头了，直接返回 true
             return true;
           }
-          if (parentClassName === '+') {
+          const nextIndex = index - 1;
+          // 由近到远进行匹配
+          const parentClassName = parentClassList[index];
+          const rawParentClassName = parent[index];
+          if (parentClassName === '*') {
+            // 通配符直接进入下一次迭代
+            return iterateParentItem(nextIndex);
+          }
+          if (['+', '~'].includes(parentClassName)) {
             const { currentIndex } = currentProps.$$extrainfo$$;
             if (currentIndex === 1) {
               // 没有上一个兄弟节点
               return false;
             }
-            const prevIndex = currentIndex - 1;
-            // 遇到 + 号，propsList 需要切换到它上一个兄弟节点的 parentPropsList
-            const prevExtraInfo = currentProps.$$extrainfo$$.siblingPropsList[prevIndex].$$extrainfo$$;
-            const prevParentPropsList = prevExtraInfo.parentPropsList;
-            propsList = [...prevParentPropsList, prevExtraInfo.props];
-            // 重置起始索引
-            propsListStartIndex = propsList.length - 1;
-            propsListEndIndex = 0;
-            currentProps = propsList[propsListStartIndex];
-            return true;
-          }
-          if (parentClassName === '~') {
-            
+            const siblingPropsList = currentProps.$$extrainfo$$.siblingPropsList;
+            const endIndex = parentClassName === '+' ? currentIndex - 1 : 1;
+            const startIndex = currentIndex - 1;
+            let isOk = false;
+            for (let i = startIndex; i >= endIndex; --i) {
+              const prevIndex = i - 1;
+              // 遇到 + 号，propsList 需要切换到它上一个兄弟节点的 parentPropsList
+              const prevExtraInfo = siblingPropsList[prevIndex].$$extrainfo$$;
+              const prevParentPropsList = prevExtraInfo.parentPropsList;
+              propsList = [...prevParentPropsList, prevExtraInfo.props];
+              // 重置起始索引
+              propsListStartIndex = propsList.length - 1;
+              propsListEndIndex = 0;
+              currentProps = propsList[propsListStartIndex];
+              isOk = iterateParentItem(nextIndex);
+              if (isOk) {
+                break;
+              }
+            }
+            if (parentClassName === '+') {
+              console.log('===== currentIndex', { currentIndex, endIndex, isOk });
+            }
+            return isOk;
           }
           if (parentClassName === '>') {
             propsListEndIndex = propsListStartIndex;
-            return true;
+            return iterateParentItem(nextIndex);
           }
-          
-          const parentSelectorCheck = complexExecMap[parentClassName];
+
+          const parentSelectorCheck = complexExecMap[rawParentClassName];
+          let isOk = false;
           for(let i = propsListStartIndex; i >= propsListEndIndex; --i) {
             currentProps = propsList[i];
-            const isOk = parentSelectorCheck(currentProps.$$extrainfo$$.currentIndex, currentProps.$$extrainfo$$);
+            isOk = parentSelectorCheck(currentProps.$$extrainfo$$.currentIndex, currentProps.$$extrainfo$$);
             if (isOk) {
               propsListStartIndex = i - 1;
-              if (propsListEndIndex !== 0) {
-                // 直接选择器【>】配置后，重置位置
-                propsListEndIndex = 0;
-              }
-              return true;
+              break;
             }
           }
-        });
+          if (propsListEndIndex !== 0) {
+            // 直接选择器【>】配置后，重置位置
+            propsListEndIndex = 0;
+          }
+          return isOk ? iterateParentItem(nextIndex) : false;
+        };
+        const isMatched = checkSelector(styleFnArgs) && iterateParentItem();
         if (isMatched) {
           // 表示找到级联样式了
           if (style) callback(style, weight);

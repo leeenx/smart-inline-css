@@ -17,7 +17,7 @@ export default createStyle({
       },
       '&[data-item="xx-xx-xx"]': {
         text3: {
-          backgroundColor: 'green',
+          backgroundColor: '#eee',
         }
       },
       'text2 + text2 text3': {
@@ -26,7 +26,18 @@ export default createStyle({
       'text2 > xxx': {
         backgroundColor: 'pink',
       },
-    }
+    },
+    'sibling': {
+      '&:nth-child(4)': {
+        // backgroundColor: 'lightseagreen',
+        '~ sibling': {
+          backgroundColor: 'lightblue',
+        },
+      },
+      // '~ sibling': {
+      //   backgroundColor: 'lightblue',
+      // }
+    },
   },
   main: {
     // backgroundColor: 'green',

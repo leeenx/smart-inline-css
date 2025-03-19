@@ -2,11 +2,13 @@ import React, {
   memo,
   Fragment,
   useMemo,
-  type JSXElementConstructor,
-  type PropsWithChildren,
   useEffect,
   useState,
+  version,
+  type JSXElementConstructor,
+  type PropsWithChildren,
 } from "react";
+import jsxRuntime from 'react/jsx-runtime';
 import { eventBus } from './event-bus';
 import type { PureStyle, StyleFnArgs } from '../lib/core';
 
@@ -19,31 +21,42 @@ type CreateCssReturn = {
 
 // createElement 劫持
 const ReactCreateElement = React.createElement;
-// @ts-ignore
-React.createElement = ((type, props, ...children) => {
-  if (typeof type !== 'string' && type !== React.Fragment) {
-    if (!props) {
-      return ReactCreateElement(type, {
-        $$extrainfo$$: {
-          parentClassList: [],
-          parentPropsList: [],
-          siblingPropsList: [],
-          childPropsList: [],
-        }
-      }, ...children);
-    } else if (!props.$$extrainfo$$) {
-      Object.assign(props, {
-        $$extrainfo$$: {
-          parentClassList: [],
-          parentPropsList: [],
-          siblingPropsList: [],
-          childPropsList: [],
-        }
-      });
+// jsx 劫持
+const jsx = jsxRuntime.jsx;
+
+const createDefaultExtraInfo = () => ({
+  parentClassList: [],
+  parentPropsList: [],
+  siblingPropsList: [],
+  childPropsList: [],
+});
+
+if (parseFloat(version) < 19) { // 19 之前走 createElement
+  // @ts-ignore
+  React.createElement = ((type, props, ...children) => {
+    if (typeof type !== 'string' && type !== React.Fragment) {
+      if (!props) {
+        return ReactCreateElement(type, { $$extrainfo$$: createDefaultExtraInfo() }, ...children);
+      } else if (!props.$$extrainfo$$) {
+        Object.assign(props, { $$extrainfo$$: createDefaultExtraInfo() });
+      }
     }
-  }
-  return ReactCreateElement(type, props, ...children);
-}) as typeof ReactCreateElement;
+    return ReactCreateElement(type, props, ...children);
+  }) as typeof ReactCreateElement;
+} else { // 19 走 jsx
+  // @ts-ignore
+  jsxRuntime.jsx = ((type, props, ...children) => {
+    if (typeof type !== 'string' && type !== React.Fragment) {
+      if (!props) {
+        return jsx(type, { $$extrainfo$$: createDefaultExtraInfo() }, ...children);
+        // @ts-expect-error 忽略 props 类型
+      } else if (!props.$$extrainfo$$) {
+        Object.assign(props, { $$extrainfo$$: createDefaultExtraInfo() });
+      }
+    }
+    return jsx(type, props, ...children);
+  }) as typeof jsx;
+}
 
 /**
  * 需要对全局组件做封装
@@ -150,6 +163,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
       $$extrainfo$$,
       ...others
     } = props;
+    console.log('===== sourceComponentName', sourceComponentName);
     const childList = (() => {
       if (children) {
         if (Array.isArray(children)) {
@@ -255,7 +269,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
     }
     // 微信小程序中，SourceComponent 是字符串，所以需要用 createElement 来实现
     if (sourceComponentName === 'Fragment') {
-      return React.createElement(SourceComponent, others, [renderBefore(), children, renderAfter()]);
+      return ReactCreateElement(SourceComponent, others, [renderBefore(), children, renderAfter()]);
     }
     const isEmpty = childList.length === 0;
     const isOnlyChild = childList.length === 1;
@@ -290,7 +304,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
       renderAfter(),
       <InitStyleComponent key="initStyle" initStyle={initStyle} />
     ].filter(item => Boolean(item));
-    const element = React.createElement(SourceComponent, elementOptions, content);
+    const element = ReactCreateElement(SourceComponent, elementOptions, content);
     return element;
   });
 
@@ -332,7 +346,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
       return Object.assign(resultStyle, rawStyle);
     })();
     // 微信小程序中，SourceComponent 是字符串，所以需要用 createElement 来实现
-    return React.createElement(SourceComponent, {
+    return ReactCreateElement(SourceComponent, {
       className,
       style,
       ...others

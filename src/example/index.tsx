@@ -3,7 +3,7 @@ import classnames from 'classnames';
 import './global.css';
 import components from './index.css';
 
-const { View, Text, Fragment, InlineCssContainer } = components;
+const { View, Text, Fragment, StyleWrap } = components;
 
 const Demo = memo(() => {
   const [isWrap, setIsWrap] = useState(true);
@@ -13,7 +13,7 @@ const Demo = memo(() => {
   //   }, 6000);
   // }, []);
   return (
-    <InlineCssContainer name="demo">
+    <StyleWrap name="demo">
       <View className={classnames({ wrap: true, main: true })}>
         <View className="item xxx" data-item="xx-xx-xx" data-wrap={isWrap}>
           <Text className="text1" data-text="text1-content">
@@ -74,7 +74,7 @@ const Demo = memo(() => {
           </View> */}
         </Fragment>
       </View>
-    </InlineCssContainer>
+    </StyleWrap>
   );
 });
 

@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import jsxRuntime from 'react/jsx-runtime';
 import { eventBus } from './event-bus';
-import type { PureStyle, StyleFnArgs } from '../lib/core';
+import type { PureStyle, StyleFnArgs } from './core';
 
 type CreateCssReturn = {
   getCascadeStyle: (key: string, currentIndex: number, styleFnArgs: StyleFnArgs) => PureStyle;
@@ -19,10 +19,10 @@ type CreateCssReturn = {
   setLocalName: (name: string) => void;
 }
 
+
 // createElement 劫持
 const ReactCreateElement = React.createElement;
-// jsx 劫持
-const jsx = jsxRuntime.jsx;
+const createJSX = parseFloat(version) < 19 ? React.createElement : jsxRuntime.jsx;
 
 const createDefaultExtraInfo = () => ({
   parentClassList: [],
@@ -31,32 +31,28 @@ const createDefaultExtraInfo = () => ({
   childPropsList: [],
 });
 
+const hijactJSX = ((type, props, ...children) => {
+  if (typeof type !== 'string' && type !== React.Fragment) {
+    if (!props) {
+      // @ts-expect-error
+      return createJSX(type, { $$extrainfo$$: createDefaultExtraInfo() }, ...children);
+      // @ts-expect-error 忽略 props 类型
+    } else if (!props.$$extrainfo$$) {
+      Object.assign(props, { $$extrainfo$$: createDefaultExtraInfo() });
+    }
+  }
+  // @ts-expect-error
+  return createJSX(type, props, ...children);
+}) as typeof createJSX;
+
 if (parseFloat(version) < 19) { // 19 之前走 createElement
   // @ts-ignore
-  React.createElement = ((type, props, ...children) => {
-    if (typeof type !== 'string' && type !== React.Fragment) {
-      if (!props) {
-        return ReactCreateElement(type, { $$extrainfo$$: createDefaultExtraInfo() }, ...children);
-      } else if (!props.$$extrainfo$$) {
-        Object.assign(props, { $$extrainfo$$: createDefaultExtraInfo() });
-      }
-    }
-    return ReactCreateElement(type, props, ...children);
-  }) as typeof ReactCreateElement;
+  React.createElement = hijactJSX;
 } else { // 19 走 jsx
   // @ts-ignore
-  jsxRuntime.jsx = ((type, props, ...children) => {
-    if (typeof type !== 'string' && type !== React.Fragment) {
-      if (!props) {
-        return jsx(type, { $$extrainfo$$: createDefaultExtraInfo() }, ...children);
-        // @ts-expect-error 忽略 props 类型
-      } else if (!props.$$extrainfo$$) {
-        Object.assign(props, { $$extrainfo$$: createDefaultExtraInfo() });
-      }
-    }
-    return jsx(type, props, ...children);
-  }) as typeof jsx;
+  jsxRuntime.jsx = hijactJSX;
 }
+
 
 /**
  * 需要对全局组件做封装
@@ -85,16 +81,16 @@ const InitStyleComponent = memo((props: { initStyle: () => void }) => {
 });
 
 // 组件名称
-const inlineStyleWrapKeyMap: Record<string, string> = {};
+const styleWrapKeyMap: Record<string, string> = {};
 
 // 内联样式容器
-type InlineCssContainerProps = PropsWithChildren<{ name: string, setLocalName?: (name: string) => void; }>;
-const InlineCssContainer = memo((props: InlineCssContainerProps) => {
+type StyleWrapProps = PropsWithChildren<{ name: string, setLocalName?: (name: string) => void; }>;
+const StyleWrap = memo((props: StyleWrapProps) => {
   const { name, setLocalName } = props;
   const [index, update] = useState(0);
   useMemo(() => {
     if (name) {
-      if (inlineStyleWrapKeyMap[name]) {
+      if (styleWrapKeyMap[name]) {
         // 名字冲突
         console.error('withInlineStyleWrap name 冲突，请检查！');
       }
@@ -132,16 +128,16 @@ const getNodeMemoIdByName = (name: string) => {
 };
 
 // 更新 memoId
-const updateNodeMemoIdByName = (name) => {
+const updateNodeMemoIdByName = (name: string) => {
   nodeMemoIdMap[name] = `${name}#${++memoIndex}`;
 };
 
 export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle, setLocalName }: CreateCssReturn, sourceGlobalComponents: T, containerComponentMapping = taroContainerComponentMapping) {
   const textComponentName = containerComponentMapping.Text;
-  const Text = sourceGlobalComponents[textComponentName] as JSXElementConstructor<any>;
+  const Text = (sourceGlobalComponents as Record<string, JSXElementConstructor<any>>)[textComponentName];
   const containerComponentNames = Object.values(containerComponentMapping);
 
-  const globalComponents = {} as T & { Fragment: typeof Fragment; InlineCssContainer: typeof InlineCssContainer; };
+  const globalComponents = {} as T & { Fragment: typeof Fragment; StyleWrap: typeof StyleWrap; };
 
   // 缓存样式
   const memoCascadeStyleSet: Record<string, any> = {};
@@ -163,7 +159,6 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
       $$extrainfo$$,
       ...others
     } = props;
-    console.log('===== sourceComponentName', sourceComponentName);
     const childList = (() => {
       if (children) {
         if (Array.isArray(children)) {
@@ -185,7 +180,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
       props,
     };
     // 生成缓存 id
-    const currentNodeMemoId = (sourceComponentName !== 'InlineCssContainer' ? `<${sourceComponentName}>${className}#${currentIndex}` : '');
+    const currentNodeMemoId = (sourceComponentName !== 'StyleWrap' ? `<${sourceComponentName}>${className}#${currentIndex}` : '');
     const currentClassList: string[] = ['*', sourceComponentName, ...cssNames];
     const parentClassList: string[][] = [...extraInfo.parentClassList, currentClassList];
     let memoId: string = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
@@ -194,7 +189,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
     }
     const beforeStyles: PureStyle[] = [];
     const afterStyles: PureStyle[] = [];
-    cssNames?.forEach(cssName => {
+    cssNames?.forEach((cssName: string) => {
       const beforeCss = getCascadeStyle(`${cssName}::before`, currentIndex, styleFnArgs);
       const afterCss = getCascadeStyle(`${cssName}::after`, currentIndex, styleFnArgs);
       if (!isEmptyStyle(beforeCss)) {
@@ -269,7 +264,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
     }
     // 微信小程序中，SourceComponent 是字符串，所以需要用 createElement 来实现
     if (sourceComponentName === 'Fragment') {
-      return ReactCreateElement(SourceComponent, others, [renderBefore(), children, renderAfter()]);
+      return React.createElement(SourceComponent, others, [renderBefore(), children, renderAfter()]);
     }
     const isEmpty = childList.length === 0;
     const isOnlyChild = childList.length === 1;
@@ -278,7 +273,7 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
     // 在生成 child 之后生成样式，这样可以获取到完整的 parentPropsList、sublingPropsList 和 childPropsList
     const style: PureStyle = {};
     const elementOptions = { className, style, ...others };
-    if (sourceComponentName === 'InlineCssContainer') {
+    if (sourceComponentName === 'StyleWrap') {
       Object.assign(elementOptions, { setLocalName });
     }
     const initStyle = () => {
@@ -336,8 +331,8 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
       const memoId = parentMemoId ? `${parentMemoId}|${currentNodeMemoId}` : currentNodeMemoId;
       const resultStyle: PureStyle = getMemoCascadeStyle(memoId, () => {
         const cascadeStyleList: PureStyle[] = cssNames
-          .map(cssName => getCascadeStyle(cssName, currentIndex, styleFnArgs))
-          .filter(cascadeStyle => !isEmptyStyle(cascadeStyle));
+          .map((cssName: string) => getCascadeStyle(cssName, currentIndex, styleFnArgs))
+          .filter((cascadeStyle: PureStyle) => !isEmptyStyle(cascadeStyle));
         parentClassList.push(cssNames);
         Object.assign(styleFnArgs, { currentClassList: cssNames });
         Object.assign($$extrainfo$$, { currentClassList: cssNames });
@@ -356,12 +351,12 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
   // fragment 容器
   globalComponents['Fragment'] = createContainerComponent(Fragment, 'Fragment');
 
-  // InlineCssContainer 容器
-  globalComponents['InlineCssContainer'] = createContainerComponent(InlineCssContainer, 'InlineCssContainer');
+  // StyleWrap 容器
+  globalComponents['StyleWrap'] = createContainerComponent(StyleWrap, 'StyleWrap');
 
   Object.keys(sourceGlobalComponents as Object).forEach((componentName) => {
     const key: string = componentName;
-    const SourceComponent = sourceGlobalComponents[key] as JSXElementConstructor<any>;
+    const SourceComponent = (sourceGlobalComponents as Record<string, JSXElementConstructor<any>>)[key];
     if (containerComponentNames.includes(key)) {
       globalComponents[key] = createContainerComponent(SourceComponent, key);
     } else {
@@ -373,7 +368,3 @@ export function componentBindCss<T>({ getCascadeStyle, mergeStyles, isEmptyStyle
   return globalComponents;
 };
 
-// 创建 Taro 的样式
-
-
-// 创建 RN 的样式
